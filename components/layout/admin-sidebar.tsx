@@ -14,6 +14,7 @@ import {
   Menu,
   Home,
   LogOut,
+  Settings,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ const adminNavItems: NavItem[] = [
   { href: "/admin/quizzes", label: "Quizzes", icon: BookOpen },
   { href: "/admin/questions", label: "Questions", icon: HelpCircle },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
 interface AdminSidebarProps {
