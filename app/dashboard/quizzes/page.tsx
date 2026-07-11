@@ -35,7 +35,7 @@ async function getQuizzes(categoryId?: string) {
 }
 
 function checkQuizAccess(
-  quiz: { isFree: boolean; plans: { id: string }[] },
+  quiz: { isFree: boolean; plans: { id: string; name: string }[] },
   userPlanIds: string[]
 ): { hasAccess: boolean; reason: string } {
   // Free quizzes are accessible to everyone
@@ -142,7 +142,7 @@ export default async function QuizzesPage({ searchParams }: QuizzesPageProps) {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <CardTitle className="line-clamp-1">{quiz.title}</CardTitle>
-                      <div className="flex items-center gap-2 mt-2">
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
                         {quiz.category && (
                           <Badge variant="secondary">
                             {quiz.category.name}
@@ -160,6 +160,18 @@ export default async function QuizzesPage({ searchParams }: QuizzesPageProps) {
                           </Badge>
                         )}
                       </div>
+                      {!quiz.isFree && quiz.plans.length > 0 && !access.hasAccess && (
+                        <div className="mt-2">
+                          <p className="text-xs text-muted-foreground mb-1">Required plans:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {quiz.plans.map((plan) => (
+                              <Badge key={plan.id} variant="outline" className="text-xs">
+                                {plan.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       <BookOpen className="h-5 w-5 text-primary" />

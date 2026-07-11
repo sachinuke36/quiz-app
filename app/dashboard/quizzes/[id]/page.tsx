@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Clock, HelpCircle, Trophy, AlertCircle, Play } from "lucide-react";
+import { ArrowLeft, Clock, HelpCircle, Trophy, AlertCircle, Play, Lock, Unlock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,11 +18,34 @@ async function getQuiz(id: string) {
     where: { id, isPublished: true },
     include: {
       category: true,
+      plans: true,
       _count: { select: { questions: true, attempts: true } },
     },
   });
 
   return quiz;
+}
+
+function checkQuizAccess(
+  quiz: { isFree: boolean; plans: { id: string; name: string }[] },
+  userPlanIds: string[]
+): { hasAccess: boolean; reason: string } {
+  if (quiz.isFree) {
+    return { hasAccess: true, reason: "Free" };
+  }
+
+  if (quiz.plans.length === 0) {
+    return userPlanIds.length > 0
+      ? { hasAccess: true, reason: "Subscribed" }
+      : { hasAccess: false, reason: "Subscription required" };
+  }
+
+  const quizPlanIds = quiz.plans.map((p) => p.id);
+  const hasMatchingPlan = quizPlanIds.some((planId) => userPlanIds.includes(planId));
+
+  return hasMatchingPlan
+    ? { hasAccess: true, reason: "Subscribed" }
+    : { hasAccess: false, reason: "Upgrade required" };
 }
 
 async function getUserAttempts(userId: string, quizId: string) {
@@ -46,7 +69,8 @@ export default async function QuizDetailPage({ params }: QuizDetailPageProps) {
     notFound();
   }
 
-  const hasActiveSubscription = user.subscriptions.length > 0;
+  const userPlanIds = user.subscriptions.map((s) => s.planId);
+  const access = checkQuizAccess(quiz, userPlanIds);
   const attempts = await getUserAttempts(user.id, quiz.id);
   const bestScore = attempts.length > 0
     ? Math.max(...attempts.map(a => a.percentage || 0))
@@ -133,16 +157,49 @@ export default async function QuizDetailPage({ params }: QuizDetailPageProps) {
         </Card>
       </div>
 
+      {/* Access Badge */}
+      <div className="flex items-center gap-2">
+        {quiz.isFree ? (
+          <Badge variant="success" className="gap-1">
+            <Unlock className="h-3 w-3" />
+            Free Quiz
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="gap-1">
+            <Lock className="h-3 w-3" />
+            Premium Quiz
+          </Badge>
+        )}
+      </div>
+
       {/* Warnings/Info */}
-      {!hasActiveSubscription ? (
+      {!access.hasAccess ? (
         <Alert>
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Subscription Required</AlertTitle>
+          <AlertTitle>{access.reason}</AlertTitle>
           <AlertDescription>
-            You need an active subscription to take this quiz.
-            <Link href="/dashboard/subscription" className="ml-1 underline">
-              Subscribe now
-            </Link>
+            {quiz.plans.length > 0 ? (
+              <div className="space-y-2">
+                <p>You need one of the following plans to access this quiz:</p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {quiz.plans.map((plan) => (
+                    <Badge key={plan.id} variant="secondary">
+                      {plan.name}
+                    </Badge>
+                  ))}
+                </div>
+                <Link href="/dashboard/subscription" className="text-primary underline block mt-2">
+                  View subscription plans
+                </Link>
+              </div>
+            ) : (
+              <>
+                You need an active subscription to take this quiz.
+                <Link href="/dashboard/subscription" className="ml-1 underline">
+                  Subscribe now
+                </Link>
+              </>
+            )}
           </AlertDescription>
         </Alert>
       ) : inProgressAttempt ? (
@@ -184,7 +241,7 @@ export default async function QuizDetailPage({ params }: QuizDetailPageProps) {
 
       {/* Start Button */}
       <div className="flex justify-center">
-        {hasActiveSubscription ? (
+        {access.hasAccess ? (
           <Link href={`/dashboard/quizzes/${quiz.id}/attempt`}>
             <Button size="lg" className="gap-2">
               <Play className="h-4 w-4" />
@@ -193,7 +250,10 @@ export default async function QuizDetailPage({ params }: QuizDetailPageProps) {
           </Link>
         ) : (
           <Link href="/dashboard/subscription">
-            <Button size="lg">Subscribe to Start</Button>
+            <Button size="lg" className="gap-2">
+              <Lock className="h-4 w-4" />
+              {quiz.plans.length > 0 ? "Upgrade to Start" : "Subscribe to Start"}
+            </Button>
           </Link>
         )}
       </div>
