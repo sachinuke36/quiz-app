@@ -2,22 +2,53 @@ import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createErrorResponse } from "@/lib/errors";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await requireAdmin();
 
-    const quizzes = await db.quiz.findMany({
-      include: {
-        category: true,
-        plans: true,
-        _count: {
-          select: { questions: true, attempts: true },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const search = searchParams.get("search") || "";
 
-    return Response.json({ success: true, data: quizzes });
+    const skip = (page - 1) * limit;
+
+    const where = search
+      ? {
+          OR: [
+            { title: { contains: search, mode: "insensitive" as const } },
+            { category: { name: { contains: search, mode: "insensitive" as const } } },
+          ],
+        }
+      : {};
+
+    const [quizzes, total] = await Promise.all([
+      db.quiz.findMany({
+        where,
+        include: {
+          category: true,
+          plans: true,
+          _count: {
+            select: { questions: true, attempts: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      db.quiz.count({ where }),
+    ]);
+
+    return Response.json({
+      success: true,
+      data: quizzes,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
     return createErrorResponse(error);
   }

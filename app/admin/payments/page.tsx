@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Check, X, Loader2, Eye, ExternalLink } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Check, X, Loader2, Eye, ExternalLink, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -21,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/components/ui/pagination";
 import { toast } from "sonner";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -37,23 +39,59 @@ interface Payment {
   plan: { name: string };
 }
 
+interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export default function PaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [processing, setProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState("PENDING");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [pagination, setPagination] = useState<PaginationData>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
 
+  // Debounce search input
   useEffect(() => {
-    fetchPayments();
-  }, []);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPagination((prev) => ({ ...prev, page: 1 }));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  async function fetchPayments() {
+  // Reset page when tab changes
+  useEffect(() => {
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  }, [activeTab]);
+
+  const fetchPayments = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/admin/payments");
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+        status: activeTab,
+      });
+      if (debouncedSearch) {
+        params.set("search", debouncedSearch);
+      }
+
+      const res = await fetch(`/api/admin/payments?${params}`);
       const data = await res.json();
       if (data.success) {
         setPayments(data.data);
+        setPagination(data.pagination);
       }
     } catch (error) {
       console.error(error);
@@ -61,7 +99,11 @@ export default function PaymentsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [pagination.page, pagination.limit, activeTab, debouncedSearch]);
+
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
 
   async function handleVerify(paymentId: string, status: "APPROVED" | "REJECTED") {
     setProcessing(true);
@@ -89,21 +131,15 @@ export default function PaymentsPage() {
     }
   }
 
-  const filteredPayments = payments.filter((p) => p.status === activeTab);
+  function handlePageChange(page: number) {
+    setPagination((prev) => ({ ...prev, page }));
+  }
 
   const statusVariant = {
     PENDING: "warning",
     APPROVED: "success",
     REJECTED: "destructive",
   } as const;
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -120,7 +156,7 @@ export default function PaymentsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Pending</p>
                 <p className="text-2xl font-bold">
-                  {payments.filter((p) => p.status === "PENDING").length}
+                  {activeTab === "PENDING" ? pagination.total : "-"}
                 </p>
               </div>
               <Badge variant="warning">Pending</Badge>
@@ -134,7 +170,7 @@ export default function PaymentsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Approved</p>
                 <p className="text-2xl font-bold">
-                  {payments.filter((p) => p.status === "APPROVED").length}
+                  {activeTab === "APPROVED" ? pagination.total : "-"}
                 </p>
               </div>
               <Badge variant="success">Approved</Badge>
@@ -148,13 +184,24 @@ export default function PaymentsPage() {
               <div>
                 <p className="text-sm text-muted-foreground">Rejected</p>
                 <p className="text-2xl font-bold">
-                  {payments.filter((p) => p.status === "REJECTED").length}
+                  {activeTab === "REJECTED" ? pagination.total : "-"}
                 </p>
               </div>
               <Badge variant="destructive">Rejected</Badge>
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by name, email, or UTR..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
       </div>
 
       {/* Payments Table */}
@@ -171,61 +218,83 @@ export default function PaymentsPage() {
             </TabsList>
 
             <TabsContent value={activeTab}>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>UTR Number</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPayments.length > 0 ? (
-                    filteredPayments.map((payment) => (
-                      <TableRow key={payment.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{payment.user.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {payment.user.email}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell>{payment.plan.name}</TableCell>
-                        <TableCell>{formatCurrency(payment.amount)}</TableCell>
-                        <TableCell>{payment.utrNumber || "-"}</TableCell>
-                        <TableCell>{formatDate(payment.createdAt)}</TableCell>
-                        <TableCell>
-                          <Badge variant={statusVariant[payment.status]}>
-                            {payment.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setSelectedPayment(payment)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>UTR Number</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {payments.length > 0 ? (
+                      payments.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{payment.user.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {payment.user.email}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>{payment.plan.name}</TableCell>
+                          <TableCell>{formatCurrency(payment.amount)}</TableCell>
+                          <TableCell>{payment.utrNumber || "-"}</TableCell>
+                          <TableCell>{formatDate(payment.createdAt)}</TableCell>
+                          <TableCell>
+                            <Badge variant={statusVariant[payment.status]}>
+                              {payment.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setSelectedPayment(payment)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          No {activeTab.toLowerCase()} payments
                         </TableCell>
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        No {activeTab.toLowerCase()} payments
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </TabsContent>
           </Tabs>
+
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
+                {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
+                {pagination.total} payments
+              </p>
+              <Pagination
+                currentPage={pagination.page}
+                totalPages={pagination.totalPages}
+                onPageChange={handlePageChange}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 

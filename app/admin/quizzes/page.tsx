@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   Plus,
@@ -42,6 +42,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Pagination } from "@/components/ui/pagination";
 import { toast } from "sonner";
 
 interface Quiz {
@@ -59,23 +60,52 @@ interface Quiz {
   createdAt: string;
 }
 
+interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export default function AdminQuizzesPage() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [deleteQuiz, setDeleteQuiz] = useState<Quiz | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [pagination, setPagination] = useState<PaginationData>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  });
 
+  // Debounce search input
   useEffect(() => {
-    fetchQuizzes();
-  }, []);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPagination((prev) => ({ ...prev, page: 1 }));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  async function fetchQuizzes() {
+  const fetchQuizzes = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/admin/quizzes");
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+      });
+      if (debouncedSearch) {
+        params.set("search", debouncedSearch);
+      }
+
+      const res = await fetch(`/api/admin/quizzes?${params}`);
       const data = await res.json();
       if (data.success) {
         setQuizzes(data.data);
+        setPagination(data.pagination);
       }
     } catch (error) {
       console.error(error);
@@ -83,7 +113,11 @@ export default function AdminQuizzesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [pagination.page, pagination.limit, debouncedSearch]);
+
+  useEffect(() => {
+    fetchQuizzes();
+  }, [fetchQuizzes]);
 
   async function handleDelete() {
     if (!deleteQuiz) return;
@@ -97,7 +131,7 @@ export default function AdminQuizzesPage() {
 
       if (data.success) {
         toast.success("Quiz deleted successfully");
-        setQuizzes((prev) => prev.filter((q) => q.id !== deleteQuiz.id));
+        fetchQuizzes();
       } else {
         toast.error(data.error || "Failed to delete quiz");
       }
@@ -135,18 +169,8 @@ export default function AdminQuizzesPage() {
     }
   }
 
-  const filteredQuizzes = quizzes.filter(
-    (quiz) =>
-      quiz.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      quiz.category?.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+  function handlePageChange(page: number) {
+    setPagination((prev) => ({ ...prev, page }));
   }
 
   return (
@@ -173,7 +197,7 @@ export default function AdminQuizzesPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{quizzes.length}</div>
+            <div className="text-2xl font-bold">{pagination.total}</div>
           </CardContent>
         </Card>
         <Card>
@@ -216,113 +240,135 @@ export default function AdminQuizzesPage() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Quiz</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Questions</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Access</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredQuizzes.map((quiz) => (
-                <TableRow key={quiz.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <BookOpen className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{quiz.title}</p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Target className="h-3 w-3" />
-                          {quiz.passingMarks}/{quiz.totalMarks} to pass
-                        </p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {quiz.category ? (
-                      <Badge variant="secondary">{quiz.category.name}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>{quiz._count.questions}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      {quiz.durationMinutes} min
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {quiz.isFree ? (
-                      <Badge variant="success" className="gap-1">
-                        <Unlock className="h-3 w-3" />
-                        Free
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="gap-1">
-                        <Lock className="h-3 w-3" />
-                        Premium
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={quiz.isPublished ? "success" : "secondary"}>
-                      {quiz.isPublished ? "Published" : "Draft"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/admin/quizzes/${quiz.id}`}>
-                            <Eye className="h-4 w-4 mr-2" />
-                            View
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/admin/quizzes/${quiz.id}/edit`}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => togglePublish(quiz)}>
-                          {quiz.isPublished ? "Unpublish" : "Publish"}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => setDeleteQuiz(quiz)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filteredQuizzes.length === 0 && (
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
-                    <p className="text-muted-foreground">No quizzes found</p>
-                  </TableCell>
+                  <TableHead>Quiz</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Questions</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Access</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {quizzes.map((quiz) => (
+                  <TableRow key={quiz.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <BookOpen className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{quiz.title}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Target className="h-3 w-3" />
+                            {quiz.passingMarks}/{quiz.totalMarks} to pass
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {quiz.category ? (
+                        <Badge variant="secondary">{quiz.category.name}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{quiz._count.questions}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        {quiz.durationMinutes} min
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {quiz.isFree ? (
+                        <Badge variant="success" className="gap-1">
+                          <Unlock className="h-3 w-3" />
+                          Free
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="gap-1">
+                          <Lock className="h-3 w-3" />
+                          Premium
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={quiz.isPublished ? "success" : "secondary"}>
+                        {quiz.isPublished ? "Published" : "Draft"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/admin/quizzes/${quiz.id}`}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/admin/quizzes/${quiz.id}/edit`}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => togglePublish(quiz)}>
+                            {quiz.isPublished ? "Unpublish" : "Publish"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => setDeleteQuiz(quiz)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {quizzes.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <p className="text-muted-foreground">No quizzes found</p>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
+            {Math.min(pagination.page * pagination.limit, pagination.total)} of{" "}
+            {pagination.total} quizzes
+          </p>
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={handlePageChange}
+          />
+        </div>
+      )}
 
       {/* Delete Dialog */}
       <Dialog open={!!deleteQuiz} onOpenChange={() => setDeleteQuiz(null)}>
