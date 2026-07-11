@@ -97,7 +97,7 @@ export const questionSchema = z.object({
 export const paymentSchema = z.object({
   planId: z.string().min(1, "Plan is required"),
   utrNumber: z.string().min(1, "UTR number is required"),
-  screenshotUrl: z.string().url("Invalid screenshot URL").optional(),
+  screenshotUrl: z.string().url("Invalid screenshot URL").nullish().or(z.literal("")),
   amount: z.number().min(1, "Amount must be positive"),
 });
 

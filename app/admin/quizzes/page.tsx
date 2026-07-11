@@ -13,6 +13,8 @@ import {
   BookOpen,
   Clock,
   Target,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,7 +52,9 @@ interface Quiz {
   totalMarks: number;
   passingMarks: number;
   isPublished: boolean;
+  isFree: boolean;
   category: { id: string; name: string } | null;
+  plans: { id: string; name: string }[];
   _count: { questions: number; attempts: number };
   createdAt: string;
 }
@@ -219,7 +223,7 @@ export default function AdminQuizzesPage() {
                 <TableHead>Category</TableHead>
                 <TableHead>Questions</TableHead>
                 <TableHead>Duration</TableHead>
-                <TableHead>Attempts</TableHead>
+                <TableHead>Access</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -255,7 +259,19 @@ export default function AdminQuizzesPage() {
                       {quiz.durationMinutes} min
                     </div>
                   </TableCell>
-                  <TableCell>{quiz._count.attempts}</TableCell>
+                  <TableCell>
+                    {quiz.isFree ? (
+                      <Badge variant="success" className="gap-1">
+                        <Unlock className="h-3 w-3" />
+                        Free
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1">
+                        <Lock className="h-3 w-3" />
+                        Premium
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={quiz.isPublished ? "success" : "secondary"}>
                       {quiz.isPublished ? "Published" : "Draft"}
@@ -298,7 +314,7 @@ export default function AdminQuizzesPage() {
               ))}
               {filteredQuizzes.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={8} className="text-center py-8">
                     <p className="text-muted-foreground">No quizzes found</p>
                   </TableCell>
                 </TableRow>

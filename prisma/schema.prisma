@@ -57,6 +57,7 @@ model Plan {
 
   payments      Payment[]
   subscriptions Subscription[]
+  quizzes       Quiz[]         @relation("QuizPlans")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -134,7 +135,9 @@ model Quiz {
   passingMarks    Int     @default(0)
 
   isPublished Boolean @default(false)
+  isFree      Boolean @default(true)
 
+  plans     Plan[]        @relation("QuizPlans")
   questions Question[]
   attempts  QuizAttempt[]
 

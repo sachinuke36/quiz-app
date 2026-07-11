@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Save, QrCode, CreditCard, ImageIcon } from "lucide-react";
+import { Loader2, Save, QrCode, CreditCard, Mail } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState({
     payment_qr_code: "",
     payment_upi_id: "",
+    admin_email: "",
   });
 
   useEffect(() => {
@@ -29,6 +30,7 @@ export default function SettingsPage() {
         setSettings({
           payment_qr_code: data.data.payment_qr_code || "",
           payment_upi_id: data.data.payment_upi_id || "",
+          admin_email: data.data.admin_email || "",
         });
       }
     } catch (error) {
@@ -172,21 +174,85 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Email Notification Settings */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+              <Mail className="h-5 w-5 text-blue-500" />
+            </div>
+            <div>
+              <CardTitle>Email Notifications</CardTitle>
+              <CardDescription>Configure email notifications for payments</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="adminEmail">Admin Email Address</Label>
+            <Input
+              id="adminEmail"
+              type="email"
+              value={settings.admin_email}
+              onChange={(e) =>
+                setSettings({ ...settings, admin_email: e.target.value })
+              }
+              placeholder="admin@example.com"
+            />
+            <p className="text-xs text-muted-foreground">
+              You will receive email notifications when users submit payments
+            </p>
+          </div>
+
+          <div className="bg-muted/50 rounded-lg p-4">
+            <h4 className="font-medium mb-2">Email notifications are sent for:</h4>
+            <ul className="space-y-1 text-sm text-muted-foreground">
+              <li>- New payment submissions (to admin)</li>
+              <li>- Payment approvals (to user)</li>
+              <li>- Payment rejections (to user)</li>
+            </ul>
+          </div>
+
+          <Button onClick={handleSave} disabled={saving} className="w-full">
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Save Settings
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Instructions */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">How it works</CardTitle>
+          <CardTitle className="text-lg">Setup Instructions</CardTitle>
         </CardHeader>
-        <CardContent>
-          <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-            <li>Generate a QR code from your UPI app (Google Pay, PhonePe, Paytm, etc.)</li>
-            <li>Upload the QR code image to an image hosting service</li>
-            <li>Paste the image URL in the field above</li>
-            <li>Add your UPI ID for users who prefer manual entry</li>
-            <li>Users will see this QR code when making payments</li>
-            <li>After payment, users submit their UTR number</li>
-            <li>You can approve/reject payments from the Payments page</li>
-          </ol>
+        <CardContent className="space-y-4">
+          <div>
+            <h4 className="font-medium mb-2">Payment QR Code:</h4>
+            <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+              <li>Generate a QR code from your UPI app (Google Pay, PhonePe, Paytm)</li>
+              <li>Upload the QR code image to Imgur or any image hosting service</li>
+              <li>Paste the direct image URL above</li>
+            </ol>
+          </div>
+
+          <div>
+            <h4 className="font-medium mb-2">Email Notifications (Resend):</h4>
+            <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+              <li>Sign up at <span className="font-mono">resend.com</span> (free: 100 emails/day)</li>
+              <li>Create an API key from the dashboard</li>
+              <li>Add <span className="font-mono">RESEND_API_KEY</span> to your environment variables</li>
+              <li>Optionally set <span className="font-mono">FROM_EMAIL</span> for custom sender</li>
+            </ol>
+          </div>
         </CardContent>
       </Card>
     </div>

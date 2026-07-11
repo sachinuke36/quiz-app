@@ -1,7 +1,9 @@
 import { requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createErrorResponse } from "@/lib/errors";
-import { addDays } from "date-fns";
+import { addDays, format } from "date-fns";
+import { sendEmail, paymentApprovedEmailTemplate, paymentRejectedEmailTemplate } from "@/lib/email";
+import { formatCurrency } from "@/lib/utils";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -25,7 +27,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Get payment
     const payment = await db.payment.findUnique({
       where: { id },
-      include: { plan: true },
+      include: { plan: true, user: true },
     });
 
     if (!payment) {
@@ -85,6 +87,29 @@ export async function POST(request: Request, { params }: RouteParams) {
           },
         });
       }
+
+      // Send approval email to user
+      await sendEmail({
+        to: payment.user.email,
+        subject: "Payment Approved - Subscription Activated!",
+        html: paymentApprovedEmailTemplate({
+          userName: payment.user.name,
+          planName: payment.plan.name,
+          amount: formatCurrency(payment.amount),
+          expiryDate: format(endDate, "MMMM d, yyyy"),
+        }),
+      });
+    } else {
+      // Send rejection email to user
+      await sendEmail({
+        to: payment.user.email,
+        subject: "Payment Not Approved",
+        html: paymentRejectedEmailTemplate({
+          userName: payment.user.name,
+          planName: payment.plan.name,
+          amount: formatCurrency(payment.amount),
+        }),
+      });
     }
 
     return Response.json({

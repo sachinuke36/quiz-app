@@ -13,20 +13,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check subscription
-    if (user.subscriptions.length === 0) {
-      return Response.json(
-        { success: false, error: "Active subscription required" },
-        { status: 403 }
-      );
-    }
-
     const { id: quizId } = await params;
 
-    // Get quiz with questions
+    // Get quiz with questions and plans
     const quiz = await db.quiz.findUnique({
       where: { id: quizId, isPublished: true },
       include: {
+        plans: true,
         questions: {
           include: {
             options: {
@@ -43,6 +36,32 @@ export async function POST(request: Request, { params }: RouteParams) {
         { success: false, error: "Quiz not found" },
         { status: 404 }
       );
+    }
+
+    // Check access based on quiz settings
+    if (!quiz.isFree) {
+      // Quiz requires a plan
+      if (quiz.plans.length > 0) {
+        // Check if user has any of the required plans
+        const userPlanIds = user.subscriptions.map((s) => s.planId);
+        const quizPlanIds = quiz.plans.map((p) => p.id);
+        const hasAccess = quizPlanIds.some((planId) => userPlanIds.includes(planId));
+
+        if (!hasAccess) {
+          return Response.json(
+            { success: false, error: "This quiz requires a subscription plan" },
+            { status: 403 }
+          );
+        }
+      } else {
+        // Quiz is not free but has no specific plans - require any subscription
+        if (user.subscriptions.length === 0) {
+          return Response.json(
+            { success: false, error: "Active subscription required" },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     // Check for existing incomplete attempt

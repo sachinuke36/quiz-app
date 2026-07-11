@@ -9,6 +9,7 @@ export async function GET() {
     const quizzes = await db.quiz.findMany({
       include: {
         category: true,
+        plans: true,
         _count: {
           select: { questions: true, attempts: true },
         },
@@ -35,6 +36,8 @@ export async function POST(request: Request) {
       totalMarks,
       passingMarks,
       isPublished,
+      isFree,
+      planIds,
     } = body;
 
     if (!title || !durationMinutes || !totalMarks || !passingMarks) {
@@ -53,9 +56,14 @@ export async function POST(request: Request) {
         totalMarks,
         passingMarks,
         isPublished: isPublished || false,
+        isFree: isFree ?? true,
+        plans: planIds?.length > 0 ? {
+          connect: planIds.map((id: string) => ({ id })),
+        } : undefined,
       },
       include: {
         category: true,
+        plans: true,
         _count: { select: { questions: true, attempts: true } },
       },
     });

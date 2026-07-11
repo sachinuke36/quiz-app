@@ -2,6 +2,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { paymentSchema } from "@/lib/validations";
 import { createErrorResponse } from "@/lib/errors";
+import { sendEmail, paymentReceivedEmailTemplate } from "@/lib/email";
+import { formatCurrency } from "@/lib/utils";
 
 export async function GET() {
   try {
@@ -70,10 +72,29 @@ export async function POST(request: Request) {
         planId,
         amount,
         utrNumber,
-        screenshotUrl,
+        screenshotUrl: screenshotUrl || null,
         status: "PENDING",
       },
     });
+
+    // Send email notification to admin
+    const adminEmailSetting = await db.settings.findUnique({
+      where: { key: "admin_email" },
+    });
+
+    if (adminEmailSetting?.value) {
+      await sendEmail({
+        to: adminEmailSetting.value,
+        subject: `New Payment: ${plan.name} - ${formatCurrency(amount)}`,
+        html: paymentReceivedEmailTemplate({
+          userName: user.name,
+          userEmail: user.email,
+          planName: plan.name,
+          amount: formatCurrency(amount),
+          utrNumber: utrNumber || "N/A",
+        }),
+      });
+    }
 
     return Response.json({
       success: true,

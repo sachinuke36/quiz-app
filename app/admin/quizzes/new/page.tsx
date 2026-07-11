@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Plus, Trash2, Check, GripVertical } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Check, GripVertical, Lock, Unlock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,18 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 interface Category {
   id: string;
   name: string;
+}
+
+interface Plan {
+  id: string;
+  name: string;
+  price: number;
 }
 
 interface Option {
@@ -39,6 +46,7 @@ export default function NewQuizPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
 
   // Quiz form state
   const [title, setTitle] = useState("");
@@ -47,20 +55,29 @@ export default function NewQuizPage() {
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [passingPercentage, setPassingPercentage] = useState(60);
   const [isPublished, setIsPublished] = useState(false);
+  const [isFree, setIsFree] = useState(true);
+  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
 
   // Questions
   const [questions, setQuestions] = useState<Question[]>([]);
 
   useEffect(() => {
-    fetchCategories();
+    fetchData();
   }, []);
 
-  async function fetchCategories() {
+  async function fetchData() {
     try {
-      const res = await fetch("/api/admin/categories");
-      const data = await res.json();
-      if (data.success) {
-        setCategories(data.data);
+      const [catRes, planRes] = await Promise.all([
+        fetch("/api/admin/categories"),
+        fetch("/api/admin/plans"),
+      ]);
+      const catData = await catRes.json();
+      const planData = await planRes.json();
+      if (catData.success) {
+        setCategories(catData.data);
+      }
+      if (planData.success) {
+        setPlans(planData.data);
       }
     } catch (error) {
       console.error(error);
@@ -202,6 +219,8 @@ export default function NewQuizPage() {
           totalMarks,
           passingMarks,
           isPublished,
+          isFree,
+          planIds: isFree ? [] : selectedPlanIds,
         }),
       });
 
@@ -336,6 +355,76 @@ export default function NewQuizPage() {
               </div>
               <Switch checked={isPublished} onCheckedChange={setIsPublished} />
             </div>
+          </div>
+
+          <Separator />
+
+          {/* Access Control */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center gap-3">
+                {isFree ? (
+                  <Unlock className="h-5 w-5 text-green-500" />
+                ) : (
+                  <Lock className="h-5 w-5 text-orange-500" />
+                )}
+                <div>
+                  <Label>Free Quiz</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {isFree ? "Available to all users" : "Requires subscription"}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={isFree}
+                onCheckedChange={(checked) => {
+                  setIsFree(checked);
+                  if (checked) setSelectedPlanIds([]);
+                }}
+              />
+            </div>
+
+            {!isFree && plans.length > 0 && (
+              <div className="space-y-2">
+                <Label>Select Plans</Label>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Users with any of these plans can access this quiz
+                </p>
+                <div className="grid gap-2">
+                  {plans.map((plan) => (
+                    <label
+                      key={plan.id}
+                      className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-muted/50"
+                    >
+                      <Checkbox
+                        checked={selectedPlanIds.includes(plan.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedPlanIds([...selectedPlanIds, plan.id]);
+                          } else {
+                            setSelectedPlanIds(selectedPlanIds.filter((id) => id !== plan.id));
+                          }
+                        }}
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium">{plan.name}</p>
+                      </div>
+                      <Badge variant="secondary">
+                        {plan.price === 0 ? "Free" : `₹${plan.price}`}
+                      </Badge>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!isFree && plans.length === 0 && (
+              <div className="text-center p-4 border rounded-lg bg-muted/50">
+                <p className="text-sm text-muted-foreground">
+                  No plans available. Create plans first to restrict quiz access.
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

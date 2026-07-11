@@ -16,6 +16,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       where: { id },
       include: {
         category: true,
+        plans: true,
         questions: {
           include: { options: true },
           orderBy: { createdAt: "asc" },
@@ -44,11 +45,25 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const body = await request.json();
 
+    // Extract planIds from body if present
+    const { planIds, ...updateData } = body;
+
+    // Build the update data
+    const data: Record<string, unknown> = { ...updateData };
+
+    // Handle plan connections if planIds is provided
+    if (planIds !== undefined) {
+      data.plans = {
+        set: planIds.map((planId: string) => ({ id: planId })),
+      };
+    }
+
     const quiz = await db.quiz.update({
       where: { id },
-      data: body,
+      data,
       include: {
         category: true,
+        plans: true,
         _count: { select: { questions: true, attempts: true } },
       },
     });
